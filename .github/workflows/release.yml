@@ -26,9 +26,7 @@ jobs:
       - name: Build ZIP structure
         run: |
           mkdir build
-          # Kopiujemy pliki do folderu o nazwie modułu (wymagane przez PrestaShop)
-          # Wykluczamy pliki systemowe gita, githuba i sam folder build
-          rsync -av --exclude='build' --exclude='.git' --exclude='.github' --exclude='.gitignore' . build/ngs_redis
+          rsync -av --exclude='build' --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='CODE_OF_CONDUCT.md' --exclude='CONTRIBUTING.md' --exclude='SECURITY.md' . build/ngs_redis
 
       - name: Create ZIP archive
         run: |
