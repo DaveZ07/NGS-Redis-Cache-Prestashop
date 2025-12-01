@@ -1,0 +1,42 @@
+name: Release Module
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+
+      - name: Install dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Build ZIP structure
+        run: |
+          mkdir build
+          # Kopiujemy pliki do folderu o nazwie modułu (wymagane przez PrestaShop)
+          # Wykluczamy pliki systemowe gita, githuba i sam folder build
+          rsync -av --exclude='build' --exclude='.git' --exclude='.github' --exclude='.gitignore' . build/ngs_redis
+
+      - name: Create ZIP archive
+        run: |
+          cd build
+          zip -r ../ngs_redis.zip ngs_redis
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ngs_redis.zip
+          generate_release_notes: true
