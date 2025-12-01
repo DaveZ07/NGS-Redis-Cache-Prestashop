@@ -1,6 +1,6 @@
 # NGS Redis Cache for PrestaShop 8.x
 
-![Redis](https://upload.wikimedia.org/wikipedia/en/thumb/6/6b/Redis_Logo.svg/200px-Redis_Logo.svg.png)
+![Redis](https://www.svgrepo.com/show/303460/redis-logo.svg)
 
 **NGS Redis Cache** is an advanced caching module for PrestaShop 8.x and later, replacing standard caching mechanisms (File System, Memcached) with a high-performance and scalable solution based on **Redis**. The module uses the `predis` library (PHP version) for direct communication with the Redis server, eliminating the need to install the `php-redis` PHP extension on some hosting environments (although it is recommended for maximum performance).
 
@@ -120,4 +120,4 @@ The module listens for object change events to automatically clear related cache
 
 ## License
 Module available under the **Academic Free License (AFL 3.0)**.
-Copyright © 2024 NGS.
+Copyright © 2025 NGS Software. All rights reserved.
