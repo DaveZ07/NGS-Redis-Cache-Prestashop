@@ -40,7 +40,7 @@ class Ngs_Redis extends Module
     {
         $this->name = 'ngs_redis';
         $this->tab = 'administration';
-        $this->version = '1.0.0';
+        $this->version = '1.0.1';
         $this->author = 'NGS Software';
         $this->need_instance = 1;
         $this->bootstrap = true;
@@ -118,23 +118,160 @@ class Ngs_Redis extends Module
         }
 
         $config = require $parametersFile;
-        
-        if (isset($config['parameters']['ps_cache_enable']) && 
-            $config['parameters']['ps_cache_enable'] === true && 
-            isset($config['parameters']['ps_caching']) && 
-            $config['parameters']['ps_caching'] === 'Redis') {
-            
+
+        if (
+            isset($config['parameters']['ps_cache_enable']) &&
+            $config['parameters']['ps_cache_enable'] === true &&
+            isset($config['parameters']['ps_caching']) &&
+            $config['parameters']['ps_caching'] === 'Redis'
+        ) {
+
             $content = file_get_contents($parametersFile);
             // Safely replace true with false for ps_cache_enable
             $content = preg_replace("/('ps_cache_enable'\s*=>\s*)true/", "$1false", $content);
-            
+
             file_put_contents($parametersFile, $content);
         }
     }
 
     public function getContent()
     {
+        // update handler
+        if (Tools::isSubmit('updateModule')) {
+            if ($this->updateModule()) {
+                $this->context->controller->confirmations[] = $this->l('Module updated successfully');
+            } else {
+                $this->context->controller->errors[] = $this->l('Update failed. Check permissions or internet connection.');
+            }
+        }
+
+        $latestVersion = $this->checkUpdate();
+        if ($latestVersion && version_compare($latestVersion, $this->version, '>')) {
+            $updateUrl = $this->context->link->getAdminLink('AdminModules') . '&configure=' . $this->name . '&updateModule=1';
+            $configUrl = $this->context->link->getAdminLink('AdminNgsRedisConfiguration');
+
+            $output = $this->displayConfirmation(
+                sprintf($this->l('New version %s is available! Current version: %s.'), $latestVersion, $this->version)
+            );
+
+            $output .= '
+            <div class="panel">
+                <div class="panel-heading"><i class="icon-cloud-upload"></i> ' . $this->l('Update Available') . '</div>
+                <div class="row">
+                    <div class="col-lg-12">
+                        <p>' . sprintf($this->l('A new version %s is available for download.'), $latestVersion) . '</p>
+                        <p>' . $this->l('Click the button below to update the module automatically.') . '</p>
+                        <br/>
+                        <a href="' . $updateUrl . '" class="btn btn-warning btn-lg">
+                            <i class="icon-refresh"></i> ' . $this->l('Update Now') . '
+                        </a>
+                        <a href="' . $configUrl . '" class="btn btn-default btn-lg">
+                            <i class="icon-cog"></i> ' . $this->l('Go to Configuration') . '
+                        </a>
+                        <br/><br/>
+                        <p>' . $this->l('Note that after updating the module, in module manager you will see an old version until you restart the module') . '</p>
+                    </div>
+                </div>
+            </div>';
+
+            return $output;
+        }
+
         Tools::redirectAdmin($this->context->link->getAdminLink('AdminNgsRedisConfiguration'));
+    }
+
+    public function checkUpdate()
+    {
+        // Check for updates once a day to avoid blocking api
+        $lastCheck = Configuration::get('NGS_REDIS_LAST_UPDATE_CHECK');
+        $latestVersion = Configuration::get('NGS_REDIS_LATEST_VERSION');
+
+        if (time() - (int) $lastCheck > 3600 * 24 || !$latestVersion || Tools::getValue('checkUpdate')) {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, 'https://api.github.com/repos/DaveZ07/ngs_redis/releases/latest');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'PrestaShop-Module-Updater');
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($httpCode === 200) {
+                $data = json_decode($response, true);
+                if (isset($data['tag_name'])) {
+                    $latestVersion = str_replace('v', '', $data['tag_name']);
+                    Configuration::updateValue('NGS_REDIS_LATEST_VERSION', $latestVersion);
+                    Configuration::updateValue('NGS_REDIS_LAST_UPDATE_CHECK', time());
+                    if (isset($data['assets'][0]['browser_download_url'])) {
+                        Configuration::updateValue('NGS_REDIS_DOWNLOAD_URL', $data['assets'][0]['browser_download_url']);
+                    }
+                }
+            } else {
+                PrestaShopLogger::addLog('NGS Redis Update Error: ' . $error . ' (HTTP ' . $httpCode . ')', 3);
+            }
+        }
+
+        return $latestVersion;
+    }
+
+    // Download and install update
+    public function updateModule()
+    {
+        $downloadUrl = Configuration::get('NGS_REDIS_DOWNLOAD_URL');
+        if (!$downloadUrl) {
+            $this->checkUpdate();
+            $downloadUrl = Configuration::get('NGS_REDIS_DOWNLOAD_URL');
+            if (!$downloadUrl) {
+                PrestaShopLogger::addLog('NGS Redis Update: No download URL found.', 3);
+                return false;
+            }
+        }
+        $zipFile = _PS_MODULE_DIR_ . 'ngs_redis.zip';
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $downloadUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'PrestaShop-Module-Updater');
+        $content = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || empty($content)) {
+            PrestaShopLogger::addLog('NGS Redis Update: Download failed. HTTP ' . $httpCode . '. Error: ' . $error, 3);
+            return false;
+        }
+
+        if (file_put_contents($zipFile, $content) === false) {
+            PrestaShopLogger::addLog('NGS Redis Update: Could not write zip file.', 3);
+            return false;
+        }
+
+        $zip = new ZipArchive;
+        if ($zip->open($zipFile) === TRUE) {
+            if (!$zip->extractTo(_PS_MODULE_DIR_)) {
+                PrestaShopLogger::addLog('NGS Redis Update: Extraction failed.', 3);
+                $zip->close();
+                return false;
+            }
+            $zip->close();
+            unlink($zipFile);
+            Configuration::updateValue('NGS_REDIS_LATEST_VERSION', '');
+            Configuration::updateValue('NGS_REDIS_DOWNLOAD_URL', '');
+            Tools::clearSmartyCache();
+            Tools::clearXMLCache();
+            Media::clearCache();
+
+            return true;
+        } else {
+            PrestaShopLogger::addLog('NGS Redis Update: Could not open zip file.', 3);
+        }
+
+        return false;
     }
 
     public function installTab()
@@ -146,14 +283,14 @@ class Ngs_Redis extends Module
         foreach (Language::getLanguages(true) as $lang) {
             $tab->name[$lang['id_lang']] = 'NGS Redis Cache';
         }
-        $tab->id_parent = (int)Tab::getIdFromClassName('AdminAdvancedParameters');
+        $tab->id_parent = (int) Tab::getIdFromClassName('AdminAdvancedParameters');
         $tab->module = $this->name;
         return $tab->add();
     }
 
     public function uninstallTab()
     {
-        $id_tab = (int)Tab::getIdFromClassName('AdminNgsRedisConfiguration');
+        $id_tab = (int) Tab::getIdFromClassName('AdminNgsRedisConfiguration');
         if ($id_tab) {
             $tab = new Tab($id_tab);
             return $tab->delete();
@@ -215,7 +352,7 @@ class Ngs_Redis extends Module
     public function hookActionOnImageResizeAfter($params)
     {
         if (isset($params['id_product'])) {
-             $cache = Cache::getInstance();
+            $cache = Cache::getInstance();
             if ($cache instanceof \Ngs\Redis\Classes\Cache\CacheRedis) {
                 $cache->invalidateTags([_DB_PREFIX_ . 'product']);
             }
@@ -243,7 +380,7 @@ class Ngs_Redis extends Module
         if (!Validate::isLoadedObject($object)) {
             return;
         }
-        
+
         $this->invalidateObjectCache($object);
         if (isset($object->id_product)) {
             $cache = Cache::getInstance();
@@ -263,16 +400,16 @@ class Ngs_Redis extends Module
         $def = ObjectModel::getDefinition($object);
         if (isset($def['table'])) {
             $tableName = _DB_PREFIX_ . $def['table'];
-            
+
             $cache = Cache::getInstance();
-            
+
             if ($cache instanceof \Ngs\Redis\Classes\Cache\CacheRedis) {
                 $tablesToInvalidate = [$tableName];
-                
+
                 if (isset($def['multilang']) && $def['multilang']) {
                     $tablesToInvalidate[] = $tableName . '_lang';
                 }
-                
+
                 if (isset($def['multishop']) && $def['multishop']) {
                     $tablesToInvalidate[] = $tableName . '_shop';
                 }

@@ -26,7 +26,7 @@ jobs:
       - name: Build ZIP structure
         run: |
           mkdir build
-          rsync -av --exclude='build' --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='CODE_OF_CONDUCT.md' --exclude='CONTRIBUTING.md' --exclude='SECURITY.md' . build/ngs_redis
+          rsync -av --exclude='build' --exclude='.git' --exclude='.github' --exclude='.gitignore' --exclude='CODE_OF_CONDUCT.md' --exclude='CONTRIBUTING.md' --exclude='.vscode' --exclude='SECURITY.md' . build/ngs_redis
 
       - name: Create ZIP archive
         run: |
