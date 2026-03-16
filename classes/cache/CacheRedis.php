@@ -84,7 +84,7 @@ class CacheRedis extends CacheCore
                 $this->client = new Client($sentinels, $options);
                 $this->client->connect();
                 $this->is_connected = $this->client->isConnected();
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $this->is_connected = false;
             }
         } elseif (isset($settings['connection_type']) && $settings['connection_type'] === 'cluster') {
@@ -104,7 +104,7 @@ class CacheRedis extends CacheCore
                 $this->client = new Client($nodes, $options);
                 $this->client->connect();
                 $this->is_connected = $this->client->isConnected();
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $this->is_connected = false;
             }
         } else {
@@ -132,7 +132,7 @@ class CacheRedis extends CacheCore
                 $this->client = new Client($config, ['prefix' => $this->prefix]);
                 $this->client->connect();
                 $this->is_connected = $this->client->isConnected();
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 $this->is_connected = false;
             }
         }
@@ -148,7 +148,7 @@ class CacheRedis extends CacheCore
         $context = \Context::getContext();
         if ($context && isset($context->controller)) {
             try {
-                $controllerType = $context->controller->controller_type;
+                //$controllerType = $context->controller->controller_type;
                 $controllerName = $context->controller->php_self ?? '';
 
                 if ($this->options['disable_order_page'] && ($controllerName === 'order' || $controllerName === 'order-opc')) {
@@ -181,12 +181,18 @@ class CacheRedis extends CacheCore
         }
 
         $key = $this->getQueryHash($query);
-        $this->_set($key, $result);
-
-        // Tagging logic
-        $tables = $this->extractTables($query);
-        foreach ($tables as $table) {
-            $this->client->sadd('tag:' . $table, [$key]);
+        if ($this->_set($key, $result)) {
+            $tables = $this->extractTables($query);
+            foreach ($tables as $table) {
+                $tagKey = 'tag:' . $table;
+                $this->client->sadd($tagKey, [$key]);
+                // Refresh TTL sul tag set ad ogni scrittura.
+                // Evita che i set crescano indefinitamente in produzione con maxmemory-policy LRU:
+                // Redis può evict le chiavi cache ma non i tag set (acceduti frequentemente),
+                // generando riferimenti stale. Con expire, il set si auto-pulisce dopo 7 giorni
+                // di inattività su quella tabella.
+                $this->client->expire($tagKey, 604800); // 7 giorni
+            }
         }
     }
 
@@ -218,25 +224,45 @@ class CacheRedis extends CacheCore
             // Get all keys associated with this table
             // SMEMBERS returns an array of members
             $keys = $this->client->smembers($tagKey);
-            
             if (!empty($keys)) {
                 $this->client->del($keys);
-                $this->client->del([$tagKey]);
             }
+            $this->client->del([$tagKey]);
         }
     }
 
+    /**
+     * EnX: vecchia funzione set - fixato con nuova sotto
+     *
+        protected function _set($key, $value, $ttl = 0)
+        {
+            if (!$this->is_connected) {
+                return false;
+            }
+            if ($ttl === 0) {
+                return $this->client->set($key, serialize($value));
+            }
+            return $this->client->setex($key, $ttl, serialize($value));
+        }
+         * */
 
     protected function _set($key, $value, $ttl = 0)
     {
         if (!$this->is_connected) {
             return false;
         }
-        if ($ttl === 0) {
-            return $this->client->set($key, serialize($value));
+        $encoded = json_encode($value);
+        if ($encoded === false) {
+            return false; // valore non serializzabile, non cachare
         }
-        return $this->client->setex($key, $ttl, serialize($value));
+        if ($ttl === 0) {
+            return $this->client->set($key, $encoded);
+        }
+        return $this->client->setex($key, $ttl, $encoded);
     }
+
+/**
+ * EnX: vecchia funzione _get - fixato con nuova sotto
 
     protected function _get($key)
     {
@@ -246,7 +272,33 @@ class CacheRedis extends CacheCore
         $value = $this->client->get($key);
         return $value ? unserialize($value) : false;
     }
-
+*/
+    protected function _get($key)
+    {
+        if (!$this->is_connected) {
+            return false;
+        }
+        $value = $this->client->get($key);
+        if ($value === null || $value === false) {
+            return false;
+        }
+        // Nuovo formato: JSON
+        $decoded = json_decode($value, true);
+        if ($decoded !== null || $value === 'null') {
+            return $decoded;
+        }
+        // Fallback legacy: dati ancora in formato PHP serialize (pre-deploy)
+        // Rimovibile dopo il primo flush Redis in produzione
+        try {
+            $unserialized = @unserialize($value);
+            if ($unserialized !== false || $value === 'b:0;') {
+                return $unserialized;
+            }
+        } catch (\Throwable $e) {
+            // dato corrotto, ignora
+        }
+        return false;
+    }
     protected function _exists($key)
     {
         if (!$this->is_connected) {
