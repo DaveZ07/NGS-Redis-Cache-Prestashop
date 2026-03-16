@@ -110,27 +110,33 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
         Configuration::updateValue('NGS_REDIS_DISABLE_WEBSERVICE', (bool)($options['disable_webservice'] ?? false));
         Configuration::updateValue('NGS_REDIS_DISABLE_PRODUCT_LISTING', (bool)($options['disable_product_listing'] ?? false));
 
-        // Save to file to avoid recursion in CacheRedis
-        $configContent = "<?php\nreturn [\n";
-        $configContent .= "    'host' => '" . addslashes($host) . "',\n";
-        $configContent .= "    'port' => " . (int)$port . ",\n";
-        $configContent .= "    'unix_socket' => '" . addslashes($options['unix_socket'] ?? '') . "',\n";
-        $configContent .= "    'auth' => '" . addslashes($auth) . "',\n";
-        $configContent .= "    'db' => " . (int)$db . ",\n";
-        $configContent .= "    'prefix' => '" . addslashes($prefix) . "',\n";
-        $configContent .= "    'connection_type' => '" . addslashes($options['connection_type'] ?? 'single') . "',\n";
-        $configContent .= "    'sentinel_hosts' => " . var_export($sentinelHostsArray, true) . ",\n";
-        $configContent .= "    'sentinel_service' => '" . addslashes($options['sentinel_service'] ?? 'mymaster') . "',\n";
-        $configContent .= "    'cluster_nodes' => " . var_export($clusterNodesArray, true) . ",\n";
-        $configContent .= "    'blacklist' => " . var_export($blacklistArray, true) . ",\n";
-        $configContent .= "    'blacklist_controllers' => " . var_export($blacklistControllersArray, true) . ",\n";
-        $configContent .= "    'disable_order_page' => " . ($options['disable_order_page'] ? 'true' : 'false') . ",\n";
-        $configContent .= "    'disable_checkout' => " . ($options['disable_checkout'] ? 'true' : 'false') . ",\n";
-        $configContent .= "    'disable_webservice' => " . ($options['disable_webservice'] ? 'true' : 'false') . ",\n";
-        $configContent .= "    'disable_product_listing' => " . ($options['disable_product_listing'] ? 'true' : 'false') . ",\n";
-        $configContent .= "];\n";
-        
+        // Save to file to avoid recursion in CacheRedis.
+        // var_export() sull'intero array garantisce escape corretto di qualsiasi carattere
+        // nei valori stringa (host, auth, prefix, ecc.), eliminando il rischio di code injection
+        // che era presente con la concatenazione manuale + addslashes().
+        $configArray = [
+            'host'                   => (string) $host,
+            'port'                   => (int) $port,
+            'unix_socket'            => (string) ($options['unix_socket'] ?? ''),
+            'auth'                   => (string) $auth,
+            'db'                     => (int) $db,
+            'prefix'                 => (string) $prefix,
+            'connection_type'        => (string) ($options['connection_type'] ?? 'single'),
+            'sentinel_hosts'         => array_values($sentinelHostsArray),
+            'sentinel_service'       => (string) ($options['sentinel_service'] ?? 'mymaster'),
+            'cluster_nodes'          => array_values($clusterNodesArray),
+            'blacklist'              => array_values($blacklistArray),
+            'blacklist_controllers'  => array_values($blacklistControllersArray),
+            'disable_order_page'     => (bool) ($options['disable_order_page'] ?? false),
+            'disable_checkout'       => (bool) ($options['disable_checkout'] ?? false),
+            'disable_webservice'     => (bool) ($options['disable_webservice'] ?? false),
+            'disable_product_listing'=> (bool) ($options['disable_product_listing'] ?? false),
+        ];
+
+        $configContent = '<?php' . "\n" . 'return ' . var_export($configArray, true) . ';' . "\n";
+
         file_put_contents($this->getConfigPath(), $configContent);
+        @chmod($this->getConfigPath(), 0600);
     }
 
     public function renderForm()
