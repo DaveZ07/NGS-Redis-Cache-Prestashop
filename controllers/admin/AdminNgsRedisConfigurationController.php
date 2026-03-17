@@ -121,6 +121,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
             'auth'                   => (string) $auth,
             'db'                     => (int) $db,
             'prefix'                 => (string) $prefix,
+            'query_ttl'              => 604800,
             'connection_type'        => (string) ($options['connection_type'] ?? 'single'),
             'sentinel_hosts'         => array_values($sentinelHostsArray),
             'sentinel_service'       => (string) ($options['sentinel_service'] ?? 'mymaster'),
@@ -134,9 +135,18 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
         ];
 
         $configContent = '<?php' . "\n" . 'return ' . var_export($configArray, true) . ';' . "\n";
+        $configPath = $this->getConfigPath();
+        $configDir = dirname($configPath);
 
-        file_put_contents($this->getConfigPath(), $configContent);
-        @chmod($this->getConfigPath(), 0600);
+        if (!is_dir($configDir) && !@mkdir($configDir, 0755, true) && !is_dir($configDir)) {
+            throw new RuntimeException('Failed to create Redis config directory.');
+        }
+
+        if (file_put_contents($configPath, $configContent, LOCK_EX) === false) {
+            throw new RuntimeException('Failed to write Redis configuration file.');
+        }
+
+        @chmod($configPath, 0600);
     }
 
     public function renderForm()
@@ -512,9 +522,12 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                 'disable_product_listing' => Tools::getValue('NGS_REDIS_DISABLE_PRODUCT_LISTING'),
             ];
             
-            $this->saveConfig($host, $port, $auth, $db, $prefix, $blacklist, $options);
-            
-            Tools::redirectAdmin($this->context->link->getAdminLink('AdminNgsRedisConfiguration') . '&conf=6');
+            try {
+                $this->saveConfig($host, $port, $auth, $db, $prefix, $blacklist, $options);
+                Tools::redirectAdmin($this->context->link->getAdminLink('AdminNgsRedisConfiguration') . '&conf=6');
+            } catch (Throwable $e) {
+                $this->errors[] = $this->module->l('Failed to save Redis configuration: ') . $e->getMessage();
+            }
         } elseif (Tools::isSubmit('submitTestConnection')) {
             $this->processTestConnection();
         } elseif (Tools::isSubmit('submitFlushCache')) {
