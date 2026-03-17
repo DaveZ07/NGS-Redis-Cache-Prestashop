@@ -7,21 +7,9 @@
  * @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  */
 
-// Ensure autoloader is loaded
-if (file_exists(_PS_MODULE_DIR_ . 'ngs_redis/vendor/autoload.php')) {
-    require_once _PS_MODULE_DIR_ . 'ngs_redis/vendor/autoload.php';
-}
-
-// Manually register autoloader for module classes if not already registered
-spl_autoload_register(function ($class) {
-    if (strpos($class, 'Ngs\\Redis\\Classes\\') === 0) {
-        $relative = substr($class, strlen('Ngs\\Redis\\Classes\\'));
-        $file = _PS_MODULE_DIR_ . 'ngs_redis/classes/' . str_replace('\\', '/', $relative) . '.php';
-        if (file_exists($file)) {
-            require_once $file;
-        }
-    }
-});
+// L'autoloader per Ngs\Redis\Classes\ è già registrato in ngs_redis.php (modulo principale).
+// Il vendor/autoload.php viene caricato da Cache::getInstance() se necessario.
+// Nessun autoloader ridondante qui.
 
 use Ngs\Redis\Classes\Cache\CacheRedis as NgsCacheRedis;
 

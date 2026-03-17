@@ -16,38 +16,38 @@ abstract class ObjectModel extends ObjectModelCore
     public function update($null_values = false)
     {
         $result = parent::update($null_values);
-        
-        // Invalidate cache after update
-        $this->ngsInvalidateCache();
-        
+
+        if ($result) {
+            $this->ngsInvalidateCache();
+        }
+
         return $result;
     }
 
     public function add($auto_date = true, $null_values = false)
     {
         $result = parent::add($auto_date, $null_values);
-        
-        // Invalidate cache after add
-        $this->ngsInvalidateCache();
-        
+
+        if ($result) {
+            $this->ngsInvalidateCache();
+        }
+
         return $result;
     }
 
     public function delete()
     {
         $result = parent::delete();
-        
-        // Invalidate cache after delete
-        $this->ngsInvalidateCache();
-        
+
+        if ($result) {
+            $this->ngsInvalidateCache();
+        }
+
         return $result;
     }
 
     protected function ngsInvalidateCache()
     {
-
-        $cache = Cache::getInstance();
-        if ($cache instanceof \Ngs\Redis\Classes\Cache\CacheRedis) {
-        }
+        // Cache invalidation is handled centrally by module hooks in ngs_redis.php.
     }
 }
