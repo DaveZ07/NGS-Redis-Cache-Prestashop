@@ -231,6 +231,33 @@ class CacheRedis extends CacheCore
         }
     }
 
+    /**
+     * {@inheritdoc}
+     * Bypass CacheCore's per-request keys registry and write directly to Redis.
+     */
+    public function set($key, $value, $ttl = 0)
+    {
+        return $this->_set($key, $value, $ttl);
+    }
+
+    /**
+     * {@inheritdoc}
+     * Bypass CacheCore's per-request keys check and read directly from Redis.
+     */
+    public function get($key)
+    {
+        return $this->_get($key);
+    }
+
+    /**
+     * {@inheritdoc}
+     * Bypass CacheCore's per-request keys check and query Redis directly.
+     */
+    public function exists($key)
+    {
+        return $this->_exists($key);
+    }
+
     protected function _set($key, $value, $ttl = 0)
     {
         if (!$this->is_connected) {
