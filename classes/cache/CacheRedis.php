@@ -23,7 +23,6 @@ class CacheRedis extends CacheCore
 
     protected $client;
     protected $is_connected = false;
-    protected $blacklist = [];
     protected $blacklist_controllers = [];
     protected $prefix = 'ngs_';
     protected $options = [];
@@ -54,7 +53,10 @@ class CacheRedis extends CacheCore
             ];
         }
 
-        $this->blacklist = $settings['blacklist'] ?? [];
+        $this->blacklist = array_values(array_unique(array_merge(
+            is_array($this->blacklist) ? $this->blacklist : [],
+            (array) ($settings['blacklist'] ?? [])
+        )));
         $this->blacklist_controllers = $settings['blacklist_controllers'] ?? [];
         $this->prefix = $settings['prefix'] ?? 'ngs_';
         $this->query_ttl = max(0, (int) ($settings['query_ttl'] ?? self::DEFAULT_QUERY_TTL));
@@ -176,11 +178,8 @@ class CacheRedis extends CacheCore
             }
         }
 
-        // Check blacklist
-        foreach ($this->blacklist as $table) {
-            if (stripos($query, $table) !== false) {
-                return;
-            }
+        if ($this->isQueryBlacklisted($query)) {
+            return;
         }
 
         $key = $this->getQueryHash($query);
@@ -202,15 +201,51 @@ class CacheRedis extends CacheCore
         return md5($query);
     }
 
+    protected function isQueryBlacklisted($query)
+    {
+        foreach ($this->blacklist as $table) {
+            $table = trim((string) $table, " \t\n\r\0\x0B`");
+            if ($table === '') {
+                continue;
+            }
+
+            if (stripos($table, _DB_PREFIX_) !== 0) {
+                $table = _DB_PREFIX_ . $table;
+            }
+
+            if (stripos($query, $table) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     protected function extractTables($query)
     {
-        // Simple regex to extract table names from SQL
-        preg_match_all('/(?:FROM|JOIN)\s+[`]?(' . _DB_PREFIX_ . '[a-zA-Z0-9_]+)[`]?/i', $query, $matches);
-        
+        preg_match_all(
+            '/(?:FROM|JOIN|UPDATE|INTO)\s+[`]?(' . preg_quote(_DB_PREFIX_, '/') . '[a-zA-Z0-9_-]+)[`]?/i',
+            $query,
+            $matches
+        );
+
         if (!empty($matches[1])) {
             return array_unique($matches[1]);
         }
+
         return [];
+    }
+
+    /**
+     * {@inheritdoc}
+     * Invalidate the Redis tag index populated by setQuery().
+     */
+    public function deleteQuery($query)
+    {
+        $tables = $this->extractTables($query);
+        if (!empty($tables)) {
+            $this->invalidateTags($tables);
+        }
     }
 
     public function invalidateTags(array $tables)
