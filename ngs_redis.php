@@ -40,7 +40,7 @@ class Ngs_Redis extends Module
     {
         $this->name = 'ngs_redis';
         $this->tab = 'administration';
-        $this->version = '1.0.3';
+        $this->version = '1.0.4';
         $this->author = 'davez';
         $this->need_instance = 1;
         $this->bootstrap = true;
