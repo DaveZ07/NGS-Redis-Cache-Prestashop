@@ -256,6 +256,31 @@ function testCacheRedisUsesTheBlacklistInheritedFromCacheCore(): void
     );
 }
 
+function testConfiguredBlacklistIsPreservedWithoutSemanticDuplicates(): void
+{
+    [$cache] = createCacheWithFakeClient();
+
+    assertSameValue(
+        true,
+        method_exists($cache, 'mergeBlacklistEntries'),
+        'CacheRedis must provide deterministic blacklist merging.'
+    );
+
+    $method = (new ReflectionClass(CacheRedis::class))->getMethod('mergeBlacklistEntries');
+    $method->setAccessible(true);
+    $merged = $method->invoke(
+        $cache,
+        ['employee', 'cart'],
+        ['employee', 'ps_employee', 'PS_EMPLOYEE', 'custom_stock', 'ps_custom_stock', 'ps_custom_prices']
+    );
+
+    assertSameValue(
+        ['employee', 'cart', 'custom_stock', 'ps_custom_prices'],
+        $merged,
+        'Existing custom exclusions must remain while equivalent prefixed entries are deduplicated.'
+    );
+}
+
 function testBlacklistDoesNotMatchUnprefixedSqlFragments(): void
 {
     [$cache, $client] = createCacheWithFakeClient();
@@ -315,6 +340,7 @@ $tests = [
     'testSetBypassesLocalRegistry',
     'testCoreVolatileEmployeeQueriesAreNotCached',
     'testCacheRedisUsesTheBlacklistInheritedFromCacheCore',
+    'testConfiguredBlacklistIsPreservedWithoutSemanticDuplicates',
     'testBlacklistDoesNotMatchUnprefixedSqlFragments',
     'testDeleteQueryInvalidatesRedisTagsForUpdatedTables',
     'testNotificationUpdateRemovesEmployeeCacheCreatedByPreviousVersion',

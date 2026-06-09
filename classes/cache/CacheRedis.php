@@ -53,10 +53,10 @@ class CacheRedis extends CacheCore
             ];
         }
 
-        $this->blacklist = array_values(array_unique(array_merge(
+        $this->blacklist = $this->mergeBlacklistEntries(
             is_array($this->blacklist) ? $this->blacklist : [],
             (array) ($settings['blacklist'] ?? [])
-        )));
+        );
         $this->blacklist_controllers = $settings['blacklist_controllers'] ?? [];
         $this->prefix = $settings['prefix'] ?? 'ngs_';
         $this->query_ttl = max(0, (int) ($settings['query_ttl'] ?? self::DEFAULT_QUERY_TTL));
@@ -199,6 +199,38 @@ class CacheRedis extends CacheCore
     public function getQueryHash($query)
     {
         return md5($query);
+    }
+
+    protected function mergeBlacklistEntries(array $baseBlacklist, array $configuredBlacklist)
+    {
+        $merged = [];
+        $seen = [];
+
+        foreach (array_merge($baseBlacklist, $configuredBlacklist) as $table) {
+            if (!is_scalar($table)) {
+                continue;
+            }
+
+            $table = trim((string) $table, " \t\n\r\0\x0B`");
+            if ($table === '') {
+                continue;
+            }
+
+            $identity = $table;
+            if (stripos($identity, _DB_PREFIX_) === 0) {
+                $identity = substr($identity, strlen(_DB_PREFIX_));
+            }
+            $identity = strtolower($identity);
+
+            if (isset($seen[$identity])) {
+                continue;
+            }
+
+            $seen[$identity] = true;
+            $merged[] = $table;
+        }
+
+        return $merged;
     }
 
     protected function isQueryBlacklisted($query)
