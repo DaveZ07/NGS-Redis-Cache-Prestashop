@@ -25,7 +25,7 @@ Standard PrestaShop cache based on the file system often becomes a bottleneck wi
 
 -   **Full Core Integration:** Overrides `Cache` and `CacheRedis` classes, integrating deeply with the PrestaShop core.
 -   **Unix Socket Support:** Ability to connect via socket (faster than TCP/IP) or standard Host/Port.
--   **Authorization:** Full support for Redis AUTH (password).
+-   **Authorization:** Redis AUTH with a password or Redis 6+ ACL username and password.
 -   **Database Separation:** Ability to select `Database ID` (0-15), allowing multiple stores to be cached on a single Redis instance.
 
 ### 2. Smart Exclusions (Blacklisting)
@@ -80,9 +80,12 @@ Go to **Advanced Parameters > NGS Redis Cache**.
 
 -   **Unix Socket Path:** If your Redis server and Web server are on the same machine, provide the socket path (e.g., `/var/run/redis/redis.sock`). This is the fastest method.
 -   **Redis Host / Port:** If not using a socket, provide IP (usually `127.0.0.1`) and port (`6379`).
+-   **Redis Username:** Optional ACL username supplied by your Redis provider (for example, Redis Cloud). Enter it together with the password. Leave it empty for existing password-only setups.
 -   **Redis Password:** If your Redis requires authorization.
 -   **Redis Database ID:** Default `0`. Change if another application is running on the same Redis server.
 -   **Cache Key Prefix:** Default `ngs_`. Important to avoid key collisions.
+
+The username is saved as `username` in `config/redis.php`; the password remains in `auth`. Existing configuration files without `username` continue to work. The same credentials are used for cache operations, connection tests, statistics, and cache clearing over TCP or Unix sockets and for Redis Cluster nodes. In Sentinel mode, they authenticate the discovered Redis data nodes; they do not configure authentication to the Sentinel servers themselves.
 
 ### Section: Exclusions (Tuning)
 
