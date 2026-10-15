@@ -44,6 +44,7 @@ class CacheRedis extends CacheCore
                 'connection_type' => 'single',
                 'host' => '127.0.0.1',
                 'port' => 6379,
+                'username' => '',
                 'auth' => '',
                 'db' => 0,
                 'prefix' => 'ngs_',
@@ -75,7 +76,7 @@ class CacheRedis extends CacheCore
                 'prefix' => $this->prefix,
             ];
 
-            if (!empty($settings['auth'])) {
+            if (isset($settings['auth']) && (string) $settings['auth'] !== '') {
                 $options['parameters'] = [
                     'password' => $settings['auth'],
                     'database' => $settings['db'] ?? 0,
@@ -84,6 +85,10 @@ class CacheRedis extends CacheCore
                 $options['parameters'] = [
                     'database' => $settings['db'] ?? 0,
                 ];
+            }
+
+            if (isset($settings['username']) && (string) $settings['username'] !== '') {
+                $options['parameters']['username'] = (string) $settings['username'];
             }
 
             try {
@@ -100,10 +105,14 @@ class CacheRedis extends CacheCore
                 'prefix' => $this->prefix,
             ];
 
-            if (!empty($settings['auth'])) {
+            if (isset($settings['auth']) && (string) $settings['auth'] !== '') {
                 $options['parameters'] = [
                     'password' => $settings['auth'],
                 ];
+            }
+
+            if (isset($settings['username']) && (string) $settings['username'] !== '') {
+                $options['parameters']['username'] = (string) $settings['username'];
             }
 
             try {
@@ -130,8 +139,11 @@ class CacheRedis extends CacheCore
                 ];
             }
 
-            if (!empty($settings['auth'])) {
+            if (isset($settings['auth']) && (string) $settings['auth'] !== '') {
                 $config['password'] = $settings['auth'];
+            }
+            if (isset($settings['username']) && (string) $settings['username'] !== '') {
+                $config['username'] = (string) $settings['username'];
             }
 
             try {

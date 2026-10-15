@@ -44,6 +44,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
         return [
             'host' => Configuration::get('NGS_REDIS_HOST', '127.0.0.1'),
             'port' => Configuration::get('NGS_REDIS_PORT', 6379),
+            'username' => (string) Configuration::get('NGS_REDIS_USERNAME'),
             'auth' => Configuration::get('NGS_REDIS_AUTH', ''),
             'db' => Configuration::get('NGS_REDIS_DB', 0),
             'prefix' => Configuration::get('NGS_REDIS_PREFIX', 'ngs_'),
@@ -93,6 +94,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
         Configuration::updateValue('NGS_REDIS_HOST', $host);
         Configuration::updateValue('NGS_REDIS_PORT', (int)$port);
         Configuration::updateValue('NGS_REDIS_UNIX_SOCKET', $options['unix_socket'] ?? '');
+        Configuration::updateValue('NGS_REDIS_USERNAME', $options['username'] ?? '');
         Configuration::updateValue('NGS_REDIS_AUTH', $auth);
         Configuration::updateValue('NGS_REDIS_DB', (int)$db);
         Configuration::updateValue('NGS_REDIS_PREFIX', $prefix);
@@ -118,6 +120,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
             'host'                   => (string) $host,
             'port'                   => (int) $port,
             'unix_socket'            => (string) ($options['unix_socket'] ?? ''),
+            'username'               => (string) ($options['username'] ?? ''),
             'auth'                   => (string) $auth,
             'db'                     => (int) $db,
             'prefix'                 => (string) $prefix,
@@ -222,6 +225,13 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                         'required' => false,
                         'desc' => $this->module->l('Leave empty to use TCP. If set, Host and Port will be ignored. (e.g. /var/run/redis/redis.sock)'),
                         'form_group_class' => 'single_field',
+                    ],
+                    [
+                        'type' => 'text',
+                        'label' => $this->module->l('Redis Username'),
+                        'name' => 'NGS_REDIS_USERNAME',
+                        'required' => false,
+                        'desc' => $this->module->l('Optional Redis ACL username. Leave empty for password-only authentication. In Sentinel mode, these credentials apply to Redis data nodes.'),
                     ],
                     [
                         'type' => 'text',
@@ -367,6 +377,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
         $helper->fields_value['NGS_REDIS_HOST'] = $config['host'] ?? '127.0.0.1';
         $helper->fields_value['NGS_REDIS_PORT'] = $config['port'] ?? 6379;
         $helper->fields_value['NGS_REDIS_UNIX_SOCKET'] = $config['unix_socket'] ?? '';
+        $helper->fields_value['NGS_REDIS_USERNAME'] = $config['username'] ?? '';
         $helper->fields_value['NGS_REDIS_AUTH'] = $config['auth'] ?? '';
         $helper->fields_value['NGS_REDIS_DB'] = $config['db'] ?? 0;
         $helper->fields_value['NGS_REDIS_PREFIX'] = $config['prefix'] ?? 'ngs_';
@@ -399,7 +410,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                     'service' => $config['sentinel_service'] ?? 'mymaster',
                 ];
                 
-                if (!empty($config['auth'])) {
+                if (isset($config['auth']) && (string) $config['auth'] !== '') {
                     $options['parameters'] = [
                         'password' => $config['auth'],
                         'database' => $config['db'] ?? 0,
@@ -409,16 +420,22 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                         'database' => $config['db'] ?? 0,
                     ];
                 }
+                if (isset($config['username']) && (string) $config['username'] !== '') {
+                    $options['parameters']['username'] = (string) $config['username'];
+                }
                 $client = new Predis\Client($sentinels, $options);
             } elseif (isset($config['connection_type']) && $config['connection_type'] === 'cluster') {
                 $nodes = $config['cluster_nodes'] ?? [];
                 $options = [
                     'cluster' => 'redis',
                 ];
-                if (!empty($config['auth'])) {
+                if (isset($config['auth']) && (string) $config['auth'] !== '') {
                     $options['parameters'] = [
                         'password' => $config['auth'],
                     ];
+                }
+                if (isset($config['username']) && (string) $config['username'] !== '') {
+                    $options['parameters']['username'] = (string) $config['username'];
                 }
                 $client = new Predis\Client($nodes, $options);
             } else {
@@ -437,8 +454,11 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                     ];
                 }
                 
-                if (!empty($config['auth'])) {
+                if (isset($config['auth']) && (string) $config['auth'] !== '') {
                     $clientConfig['password'] = $config['auth'];
+                }
+                if (isset($config['username']) && (string) $config['username'] !== '') {
+                    $clientConfig['username'] = (string) $config['username'];
                 }
                 $client = new Predis\Client($clientConfig);
             }
@@ -515,6 +535,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                 'sentinel_service' => Tools::getValue('NGS_REDIS_SENTINEL_SERVICE'),
                 'cluster_nodes' => Tools::getValue('NGS_REDIS_CLUSTER_NODES'),
                 'unix_socket' => $unixSocket,
+                'username' => Tools::getValue('NGS_REDIS_USERNAME', ''),
                 'blacklist_controllers' => $blacklistControllers,
                 'disable_order_page' => Tools::getValue('NGS_REDIS_DISABLE_ORDER_PAGE'),
                 'disable_checkout' => Tools::getValue('NGS_REDIS_DISABLE_CHECKOUT'),
@@ -605,7 +626,7 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                     'service' => $config['sentinel_service'] ?? 'mymaster',
                 ];
                 
-                if (!empty($config['auth'])) {
+                if (isset($config['auth']) && (string) $config['auth'] !== '') {
                     $options['parameters'] = [
                         'password' => $config['auth'],
                         'database' => $config['db'] ?? 0,
@@ -615,16 +636,22 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                         'database' => $config['db'] ?? 0,
                     ];
                 }
+                if (isset($config['username']) && (string) $config['username'] !== '') {
+                    $options['parameters']['username'] = (string) $config['username'];
+                }
                 $client = new Predis\Client($sentinels, $options);
             } elseif (isset($config['connection_type']) && $config['connection_type'] === 'cluster') {
                 $nodes = $config['cluster_nodes'] ?? [];
                 $options = [
                     'cluster' => 'redis',
                 ];
-                if (!empty($config['auth'])) {
+                if (isset($config['auth']) && (string) $config['auth'] !== '') {
                     $options['parameters'] = [
                         'password' => $config['auth'],
                     ];
+                }
+                if (isset($config['username']) && (string) $config['username'] !== '') {
+                    $options['parameters']['username'] = (string) $config['username'];
                 }
                 $client = new Predis\Client($nodes, $options);
             } else {
@@ -644,8 +671,11 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                     ];
                 }
                 
-                if (!empty($config['auth'])) {
+                if (isset($config['auth']) && (string) $config['auth'] !== '') {
                     $clientConfig['password'] = $config['auth'];
+                }
+                if (isset($config['username']) && (string) $config['username'] !== '') {
+                    $clientConfig['username'] = (string) $config['username'];
                 }
                 $client = new Predis\Client($clientConfig);
             }
@@ -697,11 +727,13 @@ class AdminNgsRedisConfigurationController extends ModuleAdminController
                 'connection_type' => 'single',
                 'host' => Tools::getValue('NGS_REDIS_HOST'),
                 'port' => Tools::getValue('NGS_REDIS_PORT'),
+                'unix_socket' => Tools::getValue('NGS_REDIS_UNIX_SOCKET', ''),
                 'auth' => Tools::getValue('NGS_REDIS_AUTH'),
                 'db' => (int)Tools::getValue('NGS_REDIS_DB'),
             ];
         }
         
+        $config['username'] = Tools::getValue('NGS_REDIS_USERNAME', '');
         $stats = $this->getRedisStats($config);
 
         if ($stats['connected']) {
